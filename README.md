@@ -2,6 +2,8 @@
 
 This repository provides a collaborative space to specify requirements, examples, and tests for on-disk file formats used to store expression matrices arising from single-cell RNA sequencing analyses. There are currently a wide variety of formats used for these data, including generic formats (e.g. CSV) and those designed specifically for this domain (e.g. Loom). 
 
+Please open an issue or make a PR if you'd like to add ideas or start a discussion!
+
 ## goals
 
 - Catalog the requirements that existing or future formats may or may not satisfy
