@@ -10,7 +10,22 @@ This repository provides a collaborative space to specify requirements, examples
 
 ## requirements
 
-[fill in]
+In many discussions, requirements fall broadly into two categories, archival (long-term storage) and analysis (daily use with analytical software in e.g. R or Python). As written, some of these are explicit requirements (e.g. self-describing), whereas others are dimensions along which different formats vary (e.g. size and speed).
+
+#### Archival
+- Long-term abilily to read and parse the file (does it depend on APIs or language-features that are likely to change?)
+- Self-describing (are the semantics of the file contained within it?)
+- Size (especially after compression)
+
+#### Analysis
+- Partial IO (can portions of the file be read without loading the whole thing?)
+  - Loading subsets of genes (e.g. fitting a regression model to each gene in parallel)
+  - Loading subsets of cells (e.g. for differential expression)
+  - Making arbitrary byte-range queries (e.g. for a web service)
+- Speed of reading and writing data
+- Storing additional metadata or features alongide primary table (e.g. derived features or auxillery measurements)
+- Optomized for sparsity (affects both speed and size)
+- Ability to handle large numbers of cells (e.g. out-of-memory, memory mapping, etc.)
 
 ## formats
 
