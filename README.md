@@ -40,7 +40,7 @@ Here we list formats that have been used or proposed thus far in the community (
 - `.loom` (a wrapper of `.h5`)
 - `.npy` (serialized `numpy` matrices)
 - `.arrow` (not currently used but potentially promising)
-- `.Robj` (serialized R objects)
+- `.Robj` (serialized R objects, e.g. from Seurat)
 
 ## test suite
 
