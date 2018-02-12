@@ -4,13 +4,13 @@ This repository provides a collaborative space to specify requirements, examples
 
 Please open an issue or make a PR if you'd like to add ideas or start a discussion!
 
-## goals
+## Goals
 
 - Catalog the requirements that existing or future formats may or may not satisfy
 - Provide example datasets and loading scripts (cross language) for these examples
 - Provide test suites that evaluate performance of formats against requirements
 
-## requirements
+## Requirements
 
 In many discussions, requirements fall broadly into two categories, archival (long-term storage) and analysis (daily use with analytical software in e.g. R or Python). As written, some of these are explicit requirements (e.g. self-describing), whereas others are dimensions along which different formats vary (e.g. size and speed).
 
@@ -29,7 +29,7 @@ In many discussions, requirements fall broadly into two categories, archival (lo
 - Optomized for sparsity (affects both speed and size)
 - Ability to handle large numbers of cells (e.g. out-of-memory, memory mapping, etc.)
 
-## formats
+## Formats
 
 Here we list formats that have been used or proposed thus far in the community (please add!):
 - `.csv` (also includes TSV)
@@ -42,6 +42,6 @@ Here we list formats that have been used or proposed thus far in the community (
 - `.arrow` (not currently used but potentially promising)
 - `.Robj` (serialized R objects, e.g. from Seurat)
 
-## test suite
+## Test suite
 
 [fill in]
