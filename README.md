@@ -4,6 +4,10 @@ This repository provides a collaborative space to specify requirements, examples
 
 Please open an issue or make a PR if you'd like to add ideas or start a discussion!
 
+Associated documents that inform this repo can be found in this [Google Drive](https://drive.google.com/drive/u/0/folders/1D___JK5hnlc5A3Qhkp5LrZgiYycvsd_2) and are linked throughout the repository.
+
+We meet from time to time, here are our [meeting notes](https://docs.google.com/document/d/1v0NSeML2F6JRuLrjXm7Kprh-BiamnpiODqHHpBnituY/edit), feel free to reach out and join!
+
 ## Goals
 
 - Catalog the requirements that existing or future formats may or may not satisfy
@@ -42,6 +46,24 @@ Here we list formats that have been used or proposed thus far in the community (
 - `.arrow` (not currently used but potentially promising)
 - `.Robj` (serialized R objects, e.g. from Seurat)
 
+## Standard Matrices
+
+We benchmark data formats and APIs on standard matrices. These matrices are found at the following S3 bucket.
+
+[TODO add S3 bucket details]
+
+[TODO describe matrices below]
+
 ## Test suite
 
-[fill in]
+Given [use cases](https://docs.google.com/document/d/1Vu0AJfV9N27hhcanRkrTcxP676ff-1qMuujrSs8jky8/edit#), we have collected we are creating a test suite to benchmark file formats contained in this project.
+
+[TODO Add details on test suite]
+
+[TODO Add details on extending test suite to new use cases]
+
+[TODO Add detials on extending test suite to new file formats]
+
+[TODO Add details on extending test suite to new data sets]
+
+Fell free to contribute!
