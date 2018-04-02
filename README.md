@@ -45,6 +45,7 @@ Here we list formats that have been used or proposed thus far in the community (
 - `.npy` (serialized `numpy` matrices)
 - `.arrow` (not currently used but potentially promising)
 - `.Robj` (serialized R objects, e.g. from Seurat)
+- `.zarr` [(chunked, compressed, N-dimensional arrays, python)](http://zarr.readthedocs.io/en/stable/index.html)
 
 ## Standard Matrices
 
