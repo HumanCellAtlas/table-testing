@@ -1,0 +1,9 @@
+# Whether the files are accessed locally or remotely. Valid values are local or
+# remote
+file_location: local
+sources:
+  - GSE84465_split
+formats:
+  - hdf5_1000_1000_chunks_3_compression
+  - hdf5_10000_10000_chunks_3_compression
+  - hdf5_20000_20000_chunks_3_compression
