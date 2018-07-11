@@ -2,6 +2,7 @@ import argparse
 import collections
 import os
 import pathlib
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -27,10 +28,11 @@ def drop_caches():
         shell=True)
 
 def ensure_dir(path):
+    """Test if directory at path exists, and if not, create it."""
     pathlib.Path(os.path.dirname(path)).mkdir(parents=True, exist_ok=True)
 
 class FileSizeMonitor(threading.Thread):
-    """Monitor the size of a file in the background. Measure twice per second."""
+    """Monitor the size of a file in the background. Measure every second."""
 
     def __init__(self, file_path):
 
@@ -46,13 +48,18 @@ class FileSizeMonitor(threading.Thread):
                 self.file_sizes.append(os.path.getsize(self.file_path))
             except OSError:
                 self.file_sizes.append(0)
-            time.sleep(.1)
+            time.sleep(1)
 
     def exit(self):
         self._exit_event.set()
         self.join()
 
 def localize_inputs(inputs, staging_dir):
+    """Copy inputs from s3 into the staging dir.
+
+    This is done prior to test execution for tests that expect data to be present in
+    a local filesystem.
+    """
 
     s3 = boto3.resource('s3', config=botocore.client.Config(signature_version=botocore.UNSIGNED))
 
@@ -106,6 +113,7 @@ def run_test(test_dir, data_yaml_path, local_staging_dir=None):
         for format_ in test_config["formats"]:
 
             sf_test_dir = os.path.join(test_staging_dir, source, format_)
+            print("Using test dir", sf_test_dir)
             # Get the s3 paths to the inputs for this source/format combo
             inputs = data_config[format_][source]
 
@@ -117,11 +125,11 @@ def run_test(test_dir, data_yaml_path, local_staging_dir=None):
             # remote s3 files first.
             if test_config["file_location"] == "local":
                 inputs = localize_inputs(inputs, sf_test_dir)
-
+            print("Done localizing")
             # Build the image that runs the test
             image, _ = DOCKER_CLIENT.images.build(path=test_dir, tag="matrix_benchmark")
             image_name = image.tags[0]
-
+            print("Built", image_name)
             drop_caches()
 
             # Set up the output path and the thread that monitors its size
@@ -130,19 +138,40 @@ def run_test(test_dir, data_yaml_path, local_staging_dir=None):
             file_monitor = FileSizeMonitor(output_path)
 
             # Actually run the test
-            cmd = ["--input_paths"]
-            cmd.extend(inputs)
-            cmd.append("--output_path")
-            cmd.append(output_path)
+            test_cmd = ["test", "--input-paths"]
+            test_cmd.extend(inputs)
+            test_cmd.append("--output-path")
+            test_cmd.append(output_path)
+
+            start_time = time.perf_counter()
             DOCKER_CLIENT.containers.run(
                 image=image_name,
-                command=' '.join(cmd),
+                command=' '.join(test_cmd),
                 volumes={sf_test_dir: {"bind": sf_test_dir, "mode": "rw"}}
             )
+            end_time = time.perf_counter()
 
             file_monitor.exit()
-            print(file_monitor.file_sizes)
+            results_log_path = os.path.join(sf_test_dir, "results.log")
+            with open(results_log_path, "w") as results_log:
+                results_log.write(str(end_time - start_time) + "\n")
+                for size in file_monitor.file_sizes:
+                    results_log.write(str(size) + "\n")
             output_file_sizes[source][format_] = file_monitor.file_sizes
+
+            # And finally, verify the output
+            test_yaml_path = os.path.join(sf_test_dir, "test.yaml")
+            shutil.copy(os.path.join(test_dir, "test.yaml"), test_yaml_path)
+
+            verify_cmd = ["verify", "--output-matrix"]
+            verify_cmd.append(output_path)
+            verify_cmd.append("--test-yaml")
+            verify_cmd.append(test_yaml_path)
+            DOCKER_CLIENT.containers.run(
+                image=image_name,
+                command=' '.join(verify_cmd),
+                volumes={sf_test_dir: {"bind": sf_test_dir, "mode": "rw"}}
+            )
 
     return output_file_sizes
 

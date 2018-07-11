@@ -7,3 +7,7 @@ formats:
   - hdf5_1000_1000_chunks_3_compression
   - hdf5_10000_10000_chunks_3_compression
   - hdf5_20000_20000_chunks_3_compression
+expected_output:
+  shape: [23465, 3000]
+  sum: 2761892936
+  non_zero_count: 7725370
