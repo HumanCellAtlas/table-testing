@@ -2,25 +2,23 @@ import argparse
 import numpy
 import yaml
 
-import h5py
+import h5sparse
+import scipy.sparse
 
 def merge_hdf5s(hdf5_paths, output_path):
 
     arrays_to_merge = []
     for hdf5_path in hdf5_paths:
-        arrays_to_merge.append(h5py.File(hdf5_path)["data"])
-    merged_array = numpy.concatenate(arrays_to_merge, axis=1)
-    with h5py.File(output_path, 'w') as output_hfile:
-        output_hfile.create_dataset(
-            name="data",
-            data=merged_array
-        )
+        arrays_to_merge.append(h5sparse.File(hdf5_path)["data"].value)
+    merged_array = scipy.sparse.hstack(arrays_to_merge, format="coo")
+    output_file = h5sparse.File(output_path, "w", libver="latest")
+    output_file.create_dataset("data", data=merged_array.toarray())
 
 def verify_hdf5(matrix_path, test_yaml_path):
 
     expected_values = yaml.load(open(test_yaml_path))['expected_output']
 
-    output_matrix = h5py.File(matrix_path)["data"]
+    output_matrix = h5sparse.File(matrix_path)["data"].value
 
     assert numpy.count_nonzero(output_matrix) == expected_values["non_zero_count"]
     assert numpy.sum(output_matrix) == expected_values["sum"]

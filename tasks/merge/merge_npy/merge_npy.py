@@ -2,25 +2,19 @@ import argparse
 import numpy
 import yaml
 
-import h5py
-
-def merge_hdf5s(hdf5_paths, output_path):
+def merge_npys(npy_paths, output_path):
 
     arrays_to_merge = []
-    for hdf5_path in hdf5_paths:
-        arrays_to_merge.append(h5py.File(hdf5_path)["data"])
+    for npy_path in npy_paths:
+        arrays_to_merge.append(numpy.load(npy_path))
     merged_array = numpy.concatenate(arrays_to_merge, axis=1)
-    with h5py.File(output_path, 'w') as output_hfile:
-        output_hfile.create_dataset(
-            name="data",
-            data=merged_array
-        )
+    numpy.save(output_path, merged_array)
 
-def verify_hdf5(matrix_path, test_yaml_path):
+def verify_npys(matrix_path, test_yaml_path):
 
     expected_values = yaml.load(open(test_yaml_path))['expected_output']
 
-    output_matrix = h5py.File(matrix_path)["data"]
+    output_matrix = numpy.load(matrix_path + ".npy")
 
     assert numpy.count_nonzero(output_matrix) == expected_values["non_zero_count"]
     assert numpy.sum(output_matrix) == expected_values["sum"]
@@ -59,9 +53,9 @@ def main():
     args = parser.parse_args()
 
     if args.subcommand == "test":
-        merge_hdf5s(args.input_paths, args.output_path)
+        merge_npys(args.input_paths, args.output_path)
     elif args.subcommand == "verify":
-        verify_hdf5(args.output_matrix, args.test_yaml)
+        verify_npys(args.output_matrix, args.test_yaml)
 
 if __name__ == "__main__":
     main()

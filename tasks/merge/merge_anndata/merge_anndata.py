@@ -2,25 +2,20 @@ import argparse
 import numpy
 import yaml
 
-import h5py
+import scanpy.api as sc
 
-def merge_hdf5s(hdf5_paths, output_path):
+def merge_anndatas(anndata_paths, output_path):
 
-    arrays_to_merge = []
-    for hdf5_path in hdf5_paths:
-        arrays_to_merge.append(h5py.File(hdf5_path)["data"])
-    merged_array = numpy.concatenate(arrays_to_merge, axis=1)
-    with h5py.File(output_path, 'w') as output_hfile:
-        output_hfile.create_dataset(
-            name="data",
-            data=merged_array
-        )
+    first_adata = sc.read_h5ad(anndata_paths[0])
+    concat_adata = first_adata.concatenate(sc.read_h5ad(a) for a in anndata_paths[1:])
+    concat_adata.write(output_path)
 
-def verify_hdf5(matrix_path, test_yaml_path):
+
+def verify_anndata(matrix_path, test_yaml_path):
 
     expected_values = yaml.load(open(test_yaml_path))['expected_output']
 
-    output_matrix = h5py.File(matrix_path)["data"]
+    output_matrix = sc.read_h5ad(matrix_path).X.T
 
     assert numpy.count_nonzero(output_matrix) == expected_values["non_zero_count"]
     assert numpy.sum(output_matrix) == expected_values["sum"]
@@ -59,9 +54,9 @@ def main():
     args = parser.parse_args()
 
     if args.subcommand == "test":
-        merge_hdf5s(args.input_paths, args.output_path)
+        merge_anndatas(args.input_paths, args.output_path)
     elif args.subcommand == "verify":
-        verify_hdf5(args.output_matrix, args.test_yaml)
+        verify_anndata(args.output_matrix, args.test_yaml)
 
 if __name__ == "__main__":
     main()
