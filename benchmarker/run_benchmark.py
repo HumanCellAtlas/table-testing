@@ -77,6 +77,7 @@ def localize_inputs(inputs, staging_dir):
     s3 = boto3.resource('s3', config=botocore.client.Config(signature_version=botocore.UNSIGNED))
 
     def localize_input(input_s3_path, staging_dir_):
+        """Download the input_s3_path into the staging_dir_."""
         parsed_path = urllib.parse.urlparse(input_s3_path)
         bucket = s3.Bucket(parsed_path.netloc)
         key = parsed_path.path[1:] # String the leading /
@@ -102,6 +103,46 @@ def localize_inputs(inputs, staging_dir):
         return localized_inputs
 
     return localize_input(inputs, staging_dir)
+
+def s3fs_mount_inputs(inputs, staging_dir):
+    """Use s3fs to mount the bucket with the inputs and treat them like local files."""
+
+    # check that we have s3fs and say something helpful if we don't
+    try:
+        subprocess.run(["s3fs", "-h"], check=True, stdout=subprocess.PIPE)
+    except FileNotFoundError:
+        raise RuntimeError("s3fs isn't installed, so we can't try s3-fuse. "
+                           "Try apt-get install s3fs")
+
+    # Just run s3fs for the whole bucket and them update the paths
+    if isinstance(inputs, list):
+        input_s3_path = inputs[0]
+    else:
+        input_s3_path = inputs
+    parsed_path = urllib.parse.urlparse(input_s3_path)
+    bucket_name = parsed_path.netloc
+    staging_input_dir = os.path.join(staging_dir, "inputs/")
+    ensure_dir(staging_input_dir)
+    s3fs_cmd = ["s3fs", bucket_name, staging_input_dir, "-o", "public_bucket=1",
+                "-o", "allow_other", "-o", "max_stat_cache_size=5000"]
+    print(" ".join(s3fs_cmd))
+    subprocess.run(s3fs_cmd, check=True)
+
+    def get_local_input_path(input_):
+        """Assuming s3fs has been run, return the locally-mounted path for the input_."""
+        parsed_path = urllib.parse.urlparse(input_)
+        key = parsed_path.path[1:]
+        local_path = os.path.join(staging_input_dir, key)
+        return local_path
+
+    if isinstance(inputs, list):
+        localized_inputs = []
+        for input_ in inputs:
+            localized_inputs.append(get_local_input_path(input_))
+        return localized_inputs
+
+    return get_local_input_path(inputs)
+
 
 def run_test_repetition(docker_image_name, test_dir, input_paths, test_yaml_path, repetition):
     """Execute one repetition of a test. Return the time it took to complete."""
@@ -192,6 +233,8 @@ def run_test(test_path, data_yaml_path, repetitions=10, local_staging_dir=None):
             # remote s3 files first.
             if test_config["file_location"] == "local":
                 inputs = localize_inputs(inputs, test_instance_dir)
+            elif test_config["file_location"] == "s3fs":
+                inputs = s3fs_mount_inputs(inputs, test_instance_dir)
             print("Done localizing to", test_instance_dir)
 
             # Build the image that runs the test
@@ -200,8 +243,10 @@ def run_test(test_path, data_yaml_path, repetitions=10, local_staging_dir=None):
             image_name = image.tags[0]
             print("Built", image_name)
 
-            running_times = [run_test_repetition(image_name, test_instance_dir, inputs, os.path.join(test_path, "test.yaml"), r)
-                             for r in range(repetitions)]
+            running_times = [
+                run_test_repetition(image_name, test_instance_dir, inputs,
+                                    os.path.join(test_path, "test.yaml"), r)
+                for r in range(repetitions)]
             test_running_times[source][format_] = running_times
 
     return test_running_times

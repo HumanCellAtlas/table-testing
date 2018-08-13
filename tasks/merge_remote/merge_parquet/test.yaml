@@ -1,0 +1,11 @@
+# Whether the files are accessed locally or remotely. Valid values are local or
+# remote
+file_location: remote
+sources:
+  - GSE84465_split
+formats:
+  - parquet 
+expected_output:
+  shape: [23465, 3000]
+  sum: 2761892936
+  non_zero_count: 7725370

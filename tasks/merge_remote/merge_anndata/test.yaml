@@ -1,0 +1,11 @@
+# Whether the files are accessed locally or remotely. Valid values are local or
+# remote
+file_location: s3fs
+sources:
+  - GSE84465_split
+formats:
+  - anndata
+expected_output:
+  shape: [23465, 3000]
+  sum: 2761892936
+  non_zero_count: 7725370
