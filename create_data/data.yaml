@@ -42,11 +42,6 @@ sources:
       genome: mm10
 # What formats to convert the source data into.
 outputs:
-  hdf5_1000_1000_chunks_3_compression:
-    format: hdf5
-    args:
-      chunks: [1000, 1000]
-      compression: 3
   hdf5_10000_10000_chunks_3_compression:
     format: hdf5
     args:
@@ -57,11 +52,6 @@ outputs:
     args:
       chunks: [20000, 20000]
       compression: 3
-  zarr_1000_1000:
-    format: zarr
-    args:
-      chunks: [1000, 1000]
-      store_type: DirectoryStore
   zarr_10000_10000:
     format: zarr
     args:
@@ -84,11 +74,10 @@ outputs:
     format: anndata
   loom:
     format: loom
-  matrix_market:
-    format: mtx
   feather:
     format: feather
-  numpy:
-    format: npy
-  parquet:
+  parquet_5000_brotli:
     format: parquet
+    args:
+      row_group_size: 5000
+      compression: BROTLI
