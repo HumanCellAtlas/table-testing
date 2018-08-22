@@ -1,0 +1,255 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Test filter+merge with different file formats
+Parameters:
+  LambdaCodeBucket:
+    Type: String
+    Description: S3 bucket with zip files containing code for the lambda functions.
+  LambdaCodeKey:
+    Type: String
+    Description: Path within the Lambda code S3 bucket to the zip file with the handlers
+Resources:
+  # Where we're going to put results
+  ResultBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Join ["-", [ !Ref "AWS::StackName", "matrix-results" ] ]
+      LifecycleConfiguration:
+        Rules:
+          - ExpirationInDays: 28
+            Status: Enabled
+  # A table we'll use to track distributed state (pretty iffy)
+  StateTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Join [ "-", [ !Ref "AWS::StackName", "state-table" ] ]
+      AttributeDefinitions:
+        - AttributeName: RequestId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: RequestId
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 25
+        WriteCapacityUnits: 25
+  TimingTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Join [ "-", [ !Ref "AWS::StackName", "timing-table" ] ]
+      AttributeDefinitions:
+        - AttributeName: RequestId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: RequestId
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 3
+        WriteCapacityUnits: 3
+  ZarrLockTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Join [ "-", [ !Ref "AWS::StackName", "zarr-lock-table" ] ]
+      AttributeDefinitions:
+        - AttributeName: LockKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: LockKey
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 25
+        WriteCapacityUnits: 25
+  ZarrOutputTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Join [ "-", [ !Ref "AWS::StackName", "zarr-output-table" ] ]
+      AttributeDefinitions:
+        - AttributeName: RequestId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: RequestId
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 15
+        WriteCapacityUnits: 15
+  # Give the lambda functions permissions they need
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join [ "-", [ !Ref "AWS::StackName", "lambda-role" ] ]
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: "/"
+  LambdaPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Join [ "-", [ !Ref "AWS::StackName", "lambda-policy" ] ]
+      Roles:
+        - !Ref LambdaRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          # Write logs
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: "arn:aws:logs:*:*:*"
+          # Do stuff with the result bucket
+          - Effect: Allow
+            Action:
+              - s3:ListBucket
+            Resource:
+              - !GetAtt ResultBucket.Arn
+          - Effect: Allow
+            Action:
+              - s3:PutObject
+              - s3:GetObject
+            Resource:
+              - !Join ["/", [ !GetAtt ResultBucket.Arn, "*" ] ]
+          - Effect: Allow
+            Action:
+              - s3:ListAllMyBuckets
+            Resource: "*"
+          # Invoke the other lambdas
+          - Effect: Allow
+            Action:
+              - lambda:InvokeFunction
+            Resource:
+              - !GetAtt MapperFunction.Arn
+              - !GetAtt WorkFunction.Arn
+              - !GetAtt ReducerFunction.Arn
+          # Update the tables
+          - Effect: Allow
+            Action:
+              - dynamodb:PutItem
+              - dynamodb:GetItem
+              - dynamodb:UpdateItem
+              - dynamodb:DeleteItem
+            Resource:
+              - !GetAtt StateTable.Arn
+              - !GetAtt ZarrLockTable.Arn
+              - !GetAtt ZarrOutputTable.Arn
+              - !GetAtt TimingTable.Arn
+          # Enable xray tracing
+          - Effect: Allow
+            Action:
+              - xray:PutTraceSegments
+              - xray:PutTelemetryRecords
+            Resource: "*"
+  XrayPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Join [ "-", [ !Ref "AWS::StackName", "xray-policy" ] ]
+      Roles:
+        - !Ref LambdaRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          # Enable xray tracing
+          - Effect: Allow
+            Action:
+              - xray:PutTraceSegments
+              - xray:PutTelemetryRecords
+            Resource: "*"
+  # All the lambdas we use to orchestrate the filter and merge
+  DriverFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: XrayPolicy
+    Properties:
+      Description: Receive request and return id
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Ref LambdaCodeKey
+      FunctionName: !Join [ "-", [ !Ref "AWS::StackName", "driver" ] ]
+      Handler: matrix_map_reduce.driver
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: "python3.6"
+      Timeout: 29
+      TracingConfig:
+        Mode: Active
+      Environment:
+        Variables:
+          STATE_TABLE: !Ref StateTable
+          MAPPER_FN: !Ref MapperFunction
+          RESULT_BUCKET: !Ref ResultBucket
+          ZARR_OUTPUT_TABLE: !Ref ZarrOutputTable
+          ZARR_LOCK_TABLE: !Ref ZarrLockTable
+          TIMING_TABLE: !Ref TimingTable
+  MapperFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: XrayPolicy
+    Properties:
+      Description: Divide files into appropriately sized work chunks
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Ref LambdaCodeKey
+      FunctionName: !Join [ "-", [ !Ref "AWS::StackName", "mapper" ] ]
+      Handler: matrix_map_reduce.mapper
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: "python3.6"
+      MemorySize: 3008
+      Timeout: 300
+      TracingConfig:
+        Mode: Active
+      Environment:
+        Variables:
+          STATE_TABLE: !Ref StateTable
+          WORK_FN: !Ref WorkFunction
+          RESULT_BUCKET: !Ref ResultBucket
+          ZARR_OUTPUT_TABLE: !Ref ZarrOutputTable
+          ZARR_LOCK_TABLE: !Ref ZarrLockTable
+          TIMING_TABLE: !Ref TimingTable
+  WorkFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: XrayPolicy
+    Properties:
+      Description: Perform filtering
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Ref LambdaCodeKey
+      FunctionName: !Join [ "-", [ !Ref "AWS::StackName", "work" ] ]
+      Handler: matrix_map_reduce.work
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: "python3.6"
+      MemorySize: 3008
+      Timeout: 300
+      TracingConfig:
+        Mode: Active
+      Environment:
+        Variables:
+          STATE_TABLE: !Ref StateTable
+          RESULT_BUCKET: !Ref ResultBucket
+          REDUCER_FN: !Ref ReducerFunction
+          ZARR_OUTPUT_TABLE: !Ref ZarrOutputTable
+          ZARR_LOCK_TABLE: !Ref ZarrLockTable
+          TIMING_TABLE: !Ref TimingTable
+  ReducerFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: XrayPolicy
+    Properties:
+      Description: Reduce results from work functions into single result
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Ref LambdaCodeKey
+      FunctionName: !Join [ "-", [ !Ref "AWS::StackName", "reducer" ] ]
+      Handler: matrix_map_reduce.reducer
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: "python3.6"
+      MemorySize: 3008
+      Timeout: 300
+      TracingConfig:
+        Mode: Active
+      Environment:
+        Variables:
+          STATE_TABLE: !Ref StateTable
+          RESULT_BUCKET: !Ref ResultBucket
+          ZARR_OUTPUT_TABLE: !Ref ZarrOutputTable
+          ZARR_LOCK_TABLE: !Ref ZarrLockTable
+          TIMING_TABLE: !Ref TimingTable
